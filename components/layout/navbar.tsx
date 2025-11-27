@@ -22,15 +22,15 @@ export default function Navbar() {
 
         {/* Desktop Menu */}
         <div className="hidden md:flex items-center gap-4 lg:gap-6 text-black dark:text-white">
-          <Link href="/" className="text-sm text-black dark:text-white hover:text-blue-500/80 transition">
+          {/* <Link href="/" className="text-sm text-black dark:text-white hover:text-blue-500/80 transition">
             Solutions
-          </Link>
-          <Link href="/try" className="text-sm text-black dark:text-white hover:text-blue-500/80 transition">
+          </Link> */}
+          {/* <Link href="/try" className="text-sm text-black dark:text-white hover:text-blue-500/80 transition">
             Try Liveness
-          </Link>
+          </Link> */}
           <ModeToggle />
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Link href="/demo-page" className="btn-primary text-sm inline-flex items-center justify-center">
+            <Link href="/try" className="btn-primary text-sm inline-flex items-center justify-center">
               Request Demo
             </Link>
           </motion.div>
@@ -63,12 +63,12 @@ export default function Navbar() {
             className="md:hidden border-t border-border bg-surface/50 backdrop-blur overflow-hidden"
           >
             <div className="px-6 py-4 space-y-4">
-              <Link href="/" className="block text-sm text-muted hover:text-foreground">
+              {/* <Link href="/" className="block text-sm text-muted hover:text-foreground">
                 Solutions
-              </Link>
-              <Link href="/try" className="block text-sm text-muted hover:text-foreground">
+              </Link> */}
+              {/* <Link href="/try" className="block text-sm text-muted hover:text-foreground">
                 Try Liveness
-              </Link>
+              </Link> */}
               <Link href="/demo-page" className="block text-sm text-muted hover:text-foreground">
                 Demo
               </Link>
