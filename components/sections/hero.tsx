@@ -41,7 +41,7 @@ export default function HeroSection() {
           <div className="flex flex-col sm:flex-row gap-4 pt-2">
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
               <Link href="/demo-page" className="btn-primary flex items-center justify-center gap-2 w-full sm:w-auto text-base">
-                Request A Demo
+                 Start
                 <ArrowRight size={16} />
               </Link>
             </motion.div>
