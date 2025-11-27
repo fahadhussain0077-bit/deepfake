@@ -74,8 +74,10 @@
 
 import { useState, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Shield, Zap, Eye, Upload, Video, X, AlertTriangle, CheckCircle2, FileText, Download } from "lucide-react"
+import { Shield, Zap, Eye, Upload, Video, X, AlertTriangle, CheckCircle2, FileText, Download, Search } from "lucide-react"
 import Image from "next/image"
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from "docx"
+import { saveAs } from "file-saver"
 
 type TabType = "image" | "video" | "document"
 
@@ -163,58 +165,68 @@ const UploadPanel = ({
     e.preventDefault()
   }
 
-  const handleRemove = () => {
+  const handleRemove = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    // Clear the file input first
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
-      onFileUpload(null)
     }
+    
+    // Notify parent to clear state (parent will handle URL cleanup)
+    onFileUpload(null)
   }
 
   return (
-    <div className="bg-gray-800 rounded-xl shadow-lg border border-gray-700 p-6 lg:p-8">
-      <h3 className="text-lg font-semibold text-white mb-4">{content.title}</h3>
+    <div className="bg-gray-800 rounded-xl shadow-lg border border-gray-700 p-6 lg:p-8 h-[500px] flex flex-col">
+      <h3 className="text-lg font-semibold text-white mb-4 flex-shrink-0">{content.title}</h3>
       
-      {uploadedImage ? (
-        <div className="relative">
-          <div className="relative w-full aspect-square rounded-lg overflow-hidden border border-gray-700">
-            <Image
-              src={uploadedImage}
-              alt="Uploaded image"
-              fill
-              className="object-cover"
-            />
-          </div>
-          <button
-            onClick={handleRemove}
-            className="absolute top-2 right-2 bg-red-500/80 hover:bg-red-500 text-white p-2 rounded-full transition-colors"
-          >
-            <X size={16} />
-          </button>
-        </div>
-      ) : (
-        <>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept={content.accept}
-            onChange={handleFileChange}
-            className="hidden"
-            id="file-upload"
-          />
-          <label
-            htmlFor="file-upload"
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            className="border-2 border-dashed border-gray-600 rounded-lg p-12 text-center hover:border-blue-500 transition-colors cursor-pointer bg-gray-900/50 block"
-          >
-            <div className="flex flex-col items-center">
-              <Icon className="w-12 h-12 text-gray-500 mb-3" />
-              <p className="text-sm font-medium text-gray-200 mb-1">{content.description}</p>
-              <p className="text-xs text-gray-500">{content.fileTypes}</p>
+      <div className="flex-1 min-h-0">
+        {uploadedImage ? (
+          <div className="relative h-full">
+            <div className="relative w-full h-full rounded-lg overflow-hidden border border-gray-700">
+              <Image
+                src={uploadedImage}
+                alt="Uploaded image"
+                fill
+                className="object-cover"
+              />
             </div>
-          </label>
-        </>
-      )}
+            <button
+              type="button"
+              onClick={handleRemove}
+              className="absolute top-2 right-2 z-10 bg-red-500/80 hover:bg-red-500 text-white p-2 rounded-full transition-colors shadow-lg"
+              aria-label="Remove uploaded file"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        ) : (
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={content.accept}
+              onChange={handleFileChange}
+              className="hidden"
+              id="file-upload"
+            />
+            <label
+              htmlFor="file-upload"
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              className="border-2 border-dashed border-gray-600 rounded-lg h-full flex items-center justify-center hover:border-blue-500 transition-colors cursor-pointer bg-gray-900/50 block"
+            >
+              <div className="flex flex-col items-center">
+                <Icon className="w-12 h-12 text-gray-500 mb-3" />
+                <p className="text-sm font-medium text-gray-200 mb-1">{content.description}</p>
+                <p className="text-xs text-gray-500">{content.fileTypes}</p>
+              </div>
+            </label>
+          </>
+        )}
+      </div>
       
       {activeTab === "document" && !uploadedImage && (
         <div className="mt-4 bg-gray-900/50 rounded-lg p-4 border border-gray-700">
@@ -227,8 +239,212 @@ const UploadPanel = ({
   )
 }
 
+// Function to generate DOCX report
+const generateDocxReport = async (analysisResult: AnalysisResult) => {
+  const isFake = analysisResult.isFake
+  const statusText = isFake ? "DEEPFAKE DETECTED" : "AUTHENTIC"
+  const statusColor = isFake ? "FF0000" : "00FF00"
+  
+  const doc = new Document({
+    sections: [
+      {
+        properties: {},
+        children: [
+          // Title
+          new Paragraph({
+            text: "DeepFake Detection Report",
+            heading: HeadingLevel.TITLE,
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 400 },
+          }),
+          
+          // Report Date
+          new Paragraph({
+            text: `Generated on: ${new Date().toLocaleDateString('en-US', { 
+              year: 'numeric', 
+              month: 'long', 
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })}`,
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 600 },
+          }),
+
+          // Executive Summary
+          new Paragraph({
+            text: "Executive Summary",
+            heading: HeadingLevel.HEADING_1,
+            spacing: { before: 400, after: 200 },
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "Status: ",
+                bold: true,
+              }),
+              new TextRun({
+                text: statusText,
+                color: statusColor,
+                bold: true,
+              }),
+            ],
+            spacing: { after: 200 },
+          }),
+          new Paragraph({
+            text: `This report presents a comprehensive analysis of the submitted content using advanced deepfake detection algorithms. The analysis evaluates multiple factors including facial geometry, texture patterns, lighting consistency, and temporal artifacts.`,
+            spacing: { after: 400 },
+          }),
+
+          // Key Metrics
+          new Paragraph({
+            text: "Key Metrics",
+            heading: HeadingLevel.HEADING_1,
+            spacing: { before: 400, after: 200 },
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Deepfake Score: ", bold: true }),
+              new TextRun({ text: `${analysisResult.deepfakeScore}%` }),
+            ],
+            spacing: { after: 100 },
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Confidence Level: ", bold: true }),
+              new TextRun({ text: `${analysisResult.confidence}%` }),
+            ],
+            spacing: { after: 100 },
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Liveness Score: ", bold: true }),
+              new TextRun({ text: `${analysisResult.livenessScore}%` }),
+            ],
+            spacing: { after: 100 },
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Processing Time: ", bold: true }),
+              new TextRun({ text: `${analysisResult.processingTime} seconds` }),
+            ],
+            spacing: { after: 400 },
+          }),
+
+          // Detailed Analysis
+          new Paragraph({
+            text: "Detailed Analysis",
+            heading: HeadingLevel.HEADING_1,
+            spacing: { before: 400, after: 200 },
+          }),
+
+          new Paragraph({
+            text: "Face Detection",
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 200, after: 100 },
+          }),
+          new Paragraph({
+            text: analysisResult.details.faceDetection,
+            spacing: { after: 200 },
+          }),
+
+          new Paragraph({
+            text: "Texture Analysis",
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 200, after: 100 },
+          }),
+          new Paragraph({
+            text: analysisResult.details.textureAnalysis,
+            spacing: { after: 200 },
+          }),
+
+          new Paragraph({
+            text: "Lighting Consistency",
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 200, after: 100 },
+          }),
+          new Paragraph({
+            text: analysisResult.details.lightingConsistency,
+            spacing: { after: 200 },
+          }),
+
+          new Paragraph({
+            text: "Temporal Analysis",
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 200, after: 100 },
+          }),
+          new Paragraph({
+            text: analysisResult.details.temporalAnalysis,
+            spacing: { after: 200 },
+          }),
+
+          // Detected Artifacts
+          ...(analysisResult.details.artifacts.length > 0 ? [
+            new Paragraph({
+              text: "Detected Artifacts",
+              heading: HeadingLevel.HEADING_2,
+              spacing: { before: 200, after: 100 },
+            }),
+            ...analysisResult.details.artifacts.map(artifact => 
+              new Paragraph({
+                text: `• ${artifact}`,
+                spacing: { after: 100 },
+              })
+            ),
+          ] : [
+            new Paragraph({
+              text: "No artifacts detected. Content appears authentic.",
+              spacing: { after: 200 },
+            }),
+          ]),
+
+          // Conclusion
+          new Paragraph({
+            text: "Conclusion",
+            heading: HeadingLevel.HEADING_1,
+            spacing: { before: 400, after: 200 },
+          }),
+          new Paragraph({
+            text: isFake 
+              ? `Based on comprehensive analysis, this content has been identified as a deepfake with ${analysisResult.confidence}% confidence. Multiple indicators of manipulation were detected, including artifacts in facial geometry, texture patterns, and lighting consistency. It is recommended to treat this content with caution and verify through additional means if critical decisions depend on its authenticity.`
+              : `Based on comprehensive analysis, this content appears to be authentic with ${analysisResult.confidence}% confidence. No significant indicators of manipulation or deepfake technology were detected. The analysis found consistent patterns across all evaluated dimensions, supporting the authenticity of the content.`,
+            spacing: { after: 400 },
+          }),
+
+          // Footer
+          new Paragraph({
+            text: "---",
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 400 },
+          }),
+          new Paragraph({
+            text: "This report was generated by DeepFake Detection System",
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 200 },
+          }),
+          new Paragraph({
+            text: "For questions or additional analysis, please contact support.",
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 400 },
+          }),
+        ],
+      },
+    ],
+  })
+
+  const blob = await Packer.toBlob(doc)
+  const fileName = `DeepFake_Detection_Report_${new Date().toISOString().split('T')[0]}.docx`
+  saveAs(blob, fileName)
+}
+
 // Detailed Analysis Report Component
-const DetailedReport = ({ analysisResult }: { analysisResult: AnalysisResult | null }) => {
+const DetailedReport = ({ 
+  analysisResult, 
+  onClear 
+}: { 
+  analysisResult: AnalysisResult | null
+  onClear: () => void
+}) => {
   if (!analysisResult) {
     return (
       <div className="bg-gray-800 rounded-xl shadow-lg border border-gray-700 p-6 lg:p-8">
@@ -254,13 +470,31 @@ const DetailedReport = ({ analysisResult }: { analysisResult: AnalysisResult | n
       {/* Header with Status */}
       <div className="flex items-center justify-between mb-6 pb-6 border-b border-gray-700">
         <h3 className="text-xl font-semibold text-white">Deepfake Analysis Report</h3>
-        <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold ${
-          isFake 
-            ? "bg-red-500/20 text-red-400 border border-red-500/30" 
-            : "bg-green-500/20 text-green-400 border border-green-500/30"
-        }`}>
-          <StatusIcon size={18} />
-          {statusText}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => {
+              const params = new URLSearchParams({
+                type: isFake ? 'fake' : 'authentic',
+                score: analysisResult.deepfakeScore.toString(),
+                confidence: analysisResult.confidence.toString(),
+                liveness: analysisResult.livenessScore.toString(),
+                artifacts: analysisResult.details.artifacts.length.toString()
+              })
+              window.open(`/deep-search?${params.toString()}`, '_blank')
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600/20 text-blue-400 border border-blue-500/30 hover:bg-blue-600/30 hover:border-blue-500/50 transition-all duration-200 shadow-lg hover:shadow-blue-500/20"
+          >
+            <Search size={16} />
+            Deep Search
+          </button>
+          <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold ${
+            isFake 
+              ? "bg-red-500/20 text-red-400 border border-red-500/30" 
+              : "bg-green-500/20 text-green-400 border border-green-500/30"
+          }`}>
+            <StatusIcon size={18} />
+            {statusText}
+          </div>
         </div>
       </div>
 
@@ -324,11 +558,21 @@ const DetailedReport = ({ analysisResult }: { analysisResult: AnalysisResult | n
 
       {/* Action Buttons */}
       <div className="flex gap-3 pt-4 border-t border-gray-700">
-        <button className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2">
+        <button
+          onClick={async () => {
+            if (analysisResult) {
+              await generateDocxReport(analysisResult)
+            }
+          }}
+          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+        >
           <Download size={18} />
           Download Report
         </button>
-        <button className="flex-1 bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition-colors">
+        <button
+          onClick={onClear}
+          className="flex-1 bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+        >
           Analyze Another
         </button>
       </div>
@@ -428,19 +672,25 @@ export default function LivenessTest() {
 
   const handleFileUpload = (file: File | null) => {
     if (!file) {
-      // Clean up previous image URL
-      if (uploadedImage) {
-        URL.revokeObjectURL(uploadedImage)
-      }
-      setUploadedImage(null)
+      // Clean up previous image URL immediately
+      setUploadedImage((prevImage) => {
+        if (prevImage) {
+          URL.revokeObjectURL(prevImage)
+        }
+        return null
+      })
       setAnalysisResult(null)
+      setIsAnalyzing(false)
       return
     }
 
     // Clean up previous image URL
-    if (uploadedImage) {
-      URL.revokeObjectURL(uploadedImage)
-    }
+    setUploadedImage((prevImage) => {
+      if (prevImage) {
+        URL.revokeObjectURL(prevImage)
+      }
+      return null
+    })
 
     // Create preview URL
     const imageUrl = URL.createObjectURL(file)
@@ -537,7 +787,12 @@ export default function LivenessTest() {
                 </div>
               </div>
             ) : (
-              <DetailedReport analysisResult={analysisResult} />
+              <DetailedReport 
+                analysisResult={analysisResult}
+                onClear={() => {
+                  handleFileUpload(null)
+                }}
+              />
             )}
           </div>
         </motion.div>
