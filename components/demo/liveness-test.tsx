@@ -72,14 +72,15 @@
 
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
-import { Shield, Zap, Eye, Upload, Video, X, AlertTriangle, CheckCircle2, FileText, Download, Search } from "lucide-react"
+import { Shield, Zap, Eye, Upload, Video, X, AlertTriangle, CheckCircle2, FileText, Download, Search, Music } from "lucide-react"
 import Image from "next/image"
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from "docx"
 import { saveAs } from "file-saver"
 
-type TabType = "image" | "video" | "document"
+type TabType = "image" | "video" | "document" | "audio"
 
 interface AnalysisResult {
   isFake: boolean
@@ -88,10 +89,20 @@ interface AnalysisResult {
   livenessScore: number
   processingTime: number
   details: {
-    faceDetection: string
-    textureAnalysis: string
-    lightingConsistency: string
-    temporalAnalysis: string
+    faceDetection?: string
+    textureAnalysis?: string
+    lightingConsistency?: string
+    temporalAnalysis?: string
+    // Audio-specific fields
+    voiceAnalysis?: string
+    spectralAnalysis?: string
+    prosodyAnalysis?: string
+    backgroundNoise?: string
+    // Document-specific fields
+    documentAuthenticity?: string
+    signatureVerification?: string
+    metadataAnalysis?: string
+    watermarkDetection?: string
     artifacts: string[]
   }
 }
@@ -134,6 +145,14 @@ const UploadPanel = ({
           fileTypes: "PDF, DOC, DOCX (max. 20MB)",
           accept: ".pdf,.doc,.docx"
         }
+      case "audio":
+        return {
+          title: "Upload Audio",
+          icon: Music,
+          description: "Click to upload or drag and drop",
+          fileTypes: "MP3, WAV, M4A (max. 30MB)",
+          accept: "audio/*"
+        }
     }
   }
 
@@ -156,6 +175,8 @@ const UploadPanel = ({
       } else if (activeTab === "document" && (file.type === "application/pdf" || file.type.includes("document") || file.name.endsWith(".pdf") || file.name.endsWith(".doc") || file.name.endsWith(".docx"))) {
         onFileUpload(file)
       } else if (activeTab === "video" && file.type.startsWith("video/")) {
+        onFileUpload(file)
+      } else if (activeTab === "audio" && file.type.startsWith("audio/")) {
         onFileUpload(file)
       }
     }
@@ -185,22 +206,39 @@ const UploadPanel = ({
       <div className="flex-1 min-h-0">
         {uploadedImage ? (
           <div className="relative h-full">
-            <div className="relative w-full h-full rounded-lg overflow-hidden border border-gray-700">
-              <Image
-                src={uploadedImage}
-                alt="Uploaded image"
-                fill
-                className="object-cover"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={handleRemove}
-              className="absolute top-2 right-2 z-10 bg-red-500/80 hover:bg-red-500 text-white p-2 rounded-full transition-colors shadow-lg"
-              aria-label="Remove uploaded file"
-            >
-              <X size={16} />
-            </button>
+            {activeTab === "audio" ? (
+              <div className="relative w-full h-full rounded-lg overflow-hidden border border-gray-700 bg-gray-900/50 flex items-center justify-center">
+                <audio controls className="w-full max-w-md">
+                  <source src={uploadedImage} />
+                  Your browser does not support the audio element.
+                </audio>
+                <button
+                  type="button"
+                  onClick={handleRemove}
+                  className="absolute top-2 right-2 z-10 bg-red-500/80 hover:bg-red-500 text-white p-2 rounded-full transition-colors shadow-lg"
+                  aria-label="Remove uploaded file"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            ) : (
+              <div className="relative w-full h-full rounded-lg overflow-hidden border border-gray-700">
+                <Image
+                  src={uploadedImage}
+                  alt="Uploaded file"
+                  fill
+                  className="object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={handleRemove}
+                  className="absolute top-2 right-2 z-10 bg-red-500/80 hover:bg-red-500 text-white p-2 rounded-full transition-colors shadow-lg"
+                  aria-label="Remove uploaded file"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <>
@@ -232,6 +270,13 @@ const UploadPanel = ({
         <div className="mt-4 bg-gray-900/50 rounded-lg p-4 border border-gray-700">
           <p className="text-xs text-gray-400 text-center">
             Supported formats: PDF, DOC, DOCX. Maximum file size: 20MB
+          </p>
+        </div>
+      )}
+      {activeTab === "audio" && !uploadedImage && (
+        <div className="mt-4 bg-gray-900/50 rounded-lg p-4 border border-gray-700">
+          <p className="text-xs text-gray-400 text-center">
+            Supported formats: MP3, WAV, M4A. Maximum file size: 30MB
           </p>
         </div>
       )}
@@ -292,7 +337,7 @@ const generateDocxReport = async (analysisResult: AnalysisResult) => {
             spacing: { after: 200 },
           }),
           new Paragraph({
-            text: `This report presents a comprehensive analysis of the submitted content using advanced deepfake detection algorithms. The analysis evaluates multiple factors including facial geometry, texture patterns, lighting consistency, and temporal artifacts.`,
+            text: `This report presents a comprehensive analysis of the submitted content using advanced deepfake detection algorithms. The analysis evaluates multiple factors including ${analysisResult.details.voiceAnalysis ? 'voice characteristics, spectral patterns, prosodic features' : 'facial geometry, texture patterns, lighting consistency'}${analysisResult.details.temporalAnalysis ? ', and temporal artifacts' : ''}.`,
             spacing: { after: 400 },
           }),
 
@@ -338,45 +383,152 @@ const generateDocxReport = async (analysisResult: AnalysisResult) => {
             spacing: { before: 400, after: 200 },
           }),
 
-          new Paragraph({
-            text: "Face Detection",
-            heading: HeadingLevel.HEADING_2,
-            spacing: { before: 200, after: 100 },
-          }),
-          new Paragraph({
-            text: analysisResult.details.faceDetection,
-            spacing: { after: 200 },
-          }),
+          // Image/Video specific analysis
+          ...(analysisResult.details.faceDetection ? [
+            new Paragraph({
+              text: "Face Detection",
+              heading: HeadingLevel.HEADING_2,
+              spacing: { before: 200, after: 100 },
+            }),
+            new Paragraph({
+              text: analysisResult.details.faceDetection,
+              spacing: { after: 200 },
+            }),
+          ] : []),
 
-          new Paragraph({
-            text: "Texture Analysis",
-            heading: HeadingLevel.HEADING_2,
-            spacing: { before: 200, after: 100 },
-          }),
-          new Paragraph({
-            text: analysisResult.details.textureAnalysis,
-            spacing: { after: 200 },
-          }),
+          ...(analysisResult.details.textureAnalysis ? [
+            new Paragraph({
+              text: "Texture Analysis",
+              heading: HeadingLevel.HEADING_2,
+              spacing: { before: 200, after: 100 },
+            }),
+            new Paragraph({
+              text: analysisResult.details.textureAnalysis,
+              spacing: { after: 200 },
+            }),
+          ] : []),
 
-          new Paragraph({
-            text: "Lighting Consistency",
-            heading: HeadingLevel.HEADING_2,
-            spacing: { before: 200, after: 100 },
-          }),
-          new Paragraph({
-            text: analysisResult.details.lightingConsistency,
-            spacing: { after: 200 },
-          }),
+          ...(analysisResult.details.lightingConsistency ? [
+            new Paragraph({
+              text: "Lighting Consistency",
+              heading: HeadingLevel.HEADING_2,
+              spacing: { before: 200, after: 100 },
+            }),
+            new Paragraph({
+              text: analysisResult.details.lightingConsistency,
+              spacing: { after: 200 },
+            }),
+          ] : []),
 
-          new Paragraph({
-            text: "Temporal Analysis",
-            heading: HeadingLevel.HEADING_2,
-            spacing: { before: 200, after: 100 },
-          }),
-          new Paragraph({
-            text: analysisResult.details.temporalAnalysis,
-            spacing: { after: 200 },
-          }),
+          ...(analysisResult.details.temporalAnalysis ? [
+            new Paragraph({
+              text: "Temporal Analysis",
+              heading: HeadingLevel.HEADING_2,
+              spacing: { before: 200, after: 100 },
+            }),
+            new Paragraph({
+              text: analysisResult.details.temporalAnalysis,
+              spacing: { after: 200 },
+            }),
+          ] : []),
+
+          // Audio-specific analysis
+          ...(analysisResult.details.voiceAnalysis ? [
+            new Paragraph({
+              text: "Voice Analysis",
+              heading: HeadingLevel.HEADING_2,
+              spacing: { before: 200, after: 100 },
+            }),
+            new Paragraph({
+              text: analysisResult.details.voiceAnalysis,
+              spacing: { after: 200 },
+            }),
+          ] : []),
+
+          ...(analysisResult.details.spectralAnalysis ? [
+            new Paragraph({
+              text: "Spectral Analysis",
+              heading: HeadingLevel.HEADING_2,
+              spacing: { before: 200, after: 100 },
+            }),
+            new Paragraph({
+              text: analysisResult.details.spectralAnalysis,
+              spacing: { after: 200 },
+            }),
+          ] : []),
+
+          ...(analysisResult.details.prosodyAnalysis ? [
+            new Paragraph({
+              text: "Prosody Analysis",
+              heading: HeadingLevel.HEADING_2,
+              spacing: { before: 200, after: 100 },
+            }),
+            new Paragraph({
+              text: analysisResult.details.prosodyAnalysis,
+              spacing: { after: 200 },
+            }),
+          ] : []),
+
+          ...(analysisResult.details.backgroundNoise ? [
+            new Paragraph({
+              text: "Background Noise Analysis",
+              heading: HeadingLevel.HEADING_2,
+              spacing: { before: 200, after: 100 },
+            }),
+            new Paragraph({
+              text: analysisResult.details.backgroundNoise,
+              spacing: { after: 200 },
+            }),
+          ] : []),
+
+          // Document-specific analysis
+          ...(analysisResult.details.documentAuthenticity ? [
+            new Paragraph({
+              text: "Document Authenticity",
+              heading: HeadingLevel.HEADING_2,
+              spacing: { before: 200, after: 100 },
+            }),
+            new Paragraph({
+              text: analysisResult.details.documentAuthenticity,
+              spacing: { after: 200 },
+            }),
+          ] : []),
+
+          ...(analysisResult.details.signatureVerification ? [
+            new Paragraph({
+              text: "Signature Verification",
+              heading: HeadingLevel.HEADING_2,
+              spacing: { before: 200, after: 100 },
+            }),
+            new Paragraph({
+              text: analysisResult.details.signatureVerification,
+              spacing: { after: 200 },
+            }),
+          ] : []),
+
+          ...(analysisResult.details.metadataAnalysis ? [
+            new Paragraph({
+              text: "Metadata Analysis",
+              heading: HeadingLevel.HEADING_2,
+              spacing: { before: 200, after: 100 },
+            }),
+            new Paragraph({
+              text: analysisResult.details.metadataAnalysis,
+              spacing: { after: 200 },
+            }),
+          ] : []),
+
+          ...(analysisResult.details.watermarkDetection ? [
+            new Paragraph({
+              text: "Watermark Detection",
+              heading: HeadingLevel.HEADING_2,
+              spacing: { before: 200, after: 100 },
+            }),
+            new Paragraph({
+              text: analysisResult.details.watermarkDetection,
+              spacing: { after: 200 },
+            }),
+          ] : []),
 
           // Detected Artifacts
           ...(analysisResult.details.artifacts.length > 0 ? [
@@ -406,7 +558,7 @@ const generateDocxReport = async (analysisResult: AnalysisResult) => {
           }),
           new Paragraph({
             text: isFake 
-              ? `Based on comprehensive analysis, this content has been identified as a deepfake with ${analysisResult.confidence}% confidence. Multiple indicators of manipulation were detected, including artifacts in facial geometry, texture patterns, and lighting consistency. It is recommended to treat this content with caution and verify through additional means if critical decisions depend on its authenticity.`
+              ? `Based on comprehensive analysis, this content has been identified as a deepfake with ${analysisResult.confidence}% confidence. Multiple indicators of manipulation were detected${analysisResult.details.voiceAnalysis ? ', including artifacts in voice characteristics, spectral patterns, and prosodic features' : ', including artifacts in facial geometry, texture patterns, and lighting consistency'}. It is recommended to treat this content with caution and verify through additional means if critical decisions depend on its authenticity.`
               : `Based on comprehensive analysis, this content appears to be authentic with ${analysisResult.confidence}% confidence. No significant indicators of manipulation or deepfake technology were detected. The analysis found consistent patterns across all evaluated dimensions, supporting the authenticity of the content.`,
             spacing: { after: 400 },
           }),
@@ -440,17 +592,19 @@ const generateDocxReport = async (analysisResult: AnalysisResult) => {
 // Detailed Analysis Report Component
 const DetailedReport = ({ 
   analysisResult, 
-  onClear 
+  onClear,
+  activeTab
 }: { 
   analysisResult: AnalysisResult | null
   onClear: () => void
+  activeTab: TabType
 }) => {
   if (!analysisResult) {
     return (
       <div className="bg-gray-800 rounded-xl shadow-lg border border-gray-700 p-6 lg:p-8">
         <div className="text-center py-12">
           <FileText className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-          <p className="text-gray-400">Upload an image to generate analysis report</p>
+          <p className="text-gray-400">Upload a file to generate analysis report</p>
         </div>
       </div>
     )
@@ -465,10 +619,10 @@ const DetailedReport = ({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-gray-800 rounded-xl shadow-lg border border-gray-700 p-6 lg:p-8"
+      className="bg-gray-800 rounded-xl shadow-lg border border-white/20 p-6 lg:p-8"
     >
       {/* Header with Status */}
-      <div className="flex items-center justify-between mb-6 pb-6 border-b border-gray-700">
+      <div className="flex items-center justify-between mb-6 pb-6 border-b border-white/20">
         <h3 className="text-xl font-semibold text-white">Deepfake Analysis Report</h3>
         <div className="flex items-center gap-3">
           <button
@@ -500,22 +654,22 @@ const DetailedReport = ({
 
       {/* Key Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Deepfake Score</p>
+        <div className="bg-gray-900/50 rounded-lg p-4 border border-white/20">
+          <p className="text-xs font-medium text-white uppercase tracking-wide mb-1">Deepfake Score</p>
           <p className={`text-2xl font-bold ${isFake ? "text-red-400" : "text-green-400"}`}>
             {analysisResult.deepfakeScore}%
           </p>
         </div>
-        <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Confidence</p>
+        <div className="bg-gray-900/50 rounded-lg p-4 border border-white/20">
+          <p className="text-xs font-medium text-white uppercase tracking-wide mb-1">Confidence</p>
           <p className="text-2xl font-bold text-white">{analysisResult.confidence}%</p>
         </div>
-        <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Liveness Score</p>
+        <div className="bg-gray-900/50 rounded-lg p-4 border border-white/20">
+          <p className="text-xs font-medium text-white uppercase tracking-wide mb-1">Liveness Score</p>
           <p className="text-2xl font-bold text-white">{analysisResult.livenessScore}%</p>
         </div>
-        <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Processing Time</p>
+        <div className="bg-gray-900/50 rounded-lg p-4 border border-white/20">
+          <p className="text-xs font-medium text-white uppercase tracking-wide mb-1">Processing Time</p>
           <p className="text-2xl font-bold text-white">{analysisResult.processingTime}s</p>
         </div>
       </div>
@@ -524,26 +678,121 @@ const DetailedReport = ({
       <div className="space-y-4 mb-6">
         <h4 className="text-lg font-semibold text-white mb-4">Detailed Analysis</h4>
         
-        <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
-          <p className="text-sm font-medium text-gray-300 mb-2">Face Detection</p>
-          <p className="text-sm text-gray-400">{analysisResult.details.faceDetection}</p>
-        </div>
+        {/* Image Analysis - Show only image-specific fields */}
+        {activeTab === "image" && (
+          <>
+            {analysisResult.details.faceDetection && (
+              <div className="bg-gray-900/50 rounded-lg p-4 border border-white/20">
+                <p className="text-sm font-medium text-white mb-2">Face Detection</p>
+                <p className="text-sm text-white">{analysisResult.details.faceDetection}</p>
+              </div>
+            )}
+            {analysisResult.details.textureAnalysis && (
+              <div className="bg-gray-900/50 rounded-lg p-4 border border-white/20">
+                <p className="text-sm font-medium text-white mb-2">Texture Analysis</p>
+                <p className="text-sm text-white">{analysisResult.details.textureAnalysis}</p>
+              </div>
+            )}
+            {analysisResult.details.lightingConsistency && (
+              <div className="bg-gray-900/50 rounded-lg p-4 border border-white/20">
+                <p className="text-sm font-medium text-white mb-2">Lighting Consistency</p>
+                <p className="text-sm text-white">{analysisResult.details.lightingConsistency}</p>
+              </div>
+            )}
+          </>
+        )}
 
-        <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
-          <p className="text-sm font-medium text-gray-300 mb-2">Texture Analysis</p>
-          <p className="text-sm text-gray-400">{analysisResult.details.textureAnalysis}</p>
-        </div>
+        {/* Video Analysis - Show video-specific fields including temporal */}
+        {activeTab === "video" && (
+          <>
+            {analysisResult.details.faceDetection && (
+              <div className="bg-gray-900/50 rounded-lg p-4 border border-white/20">
+                <p className="text-sm font-medium text-white mb-2">Face Detection</p>
+                <p className="text-sm text-white">{analysisResult.details.faceDetection}</p>
+              </div>
+            )}
+            {analysisResult.details.textureAnalysis && (
+              <div className="bg-gray-900/50 rounded-lg p-4 border border-white/20">
+                <p className="text-sm font-medium text-white mb-2">Texture Analysis</p>
+                <p className="text-sm text-white">{analysisResult.details.textureAnalysis}</p>
+              </div>
+            )}
+            {analysisResult.details.lightingConsistency && (
+              <div className="bg-gray-900/50 rounded-lg p-4 border border-white/20">
+                <p className="text-sm font-medium text-white mb-2">Lighting Consistency</p>
+                <p className="text-sm text-white">{analysisResult.details.lightingConsistency}</p>
+              </div>
+            )}
+            {analysisResult.details.temporalAnalysis && (
+              <div className="bg-gray-900/50 rounded-lg p-4 border border-white/20">
+                <p className="text-sm font-medium text-white mb-2">Temporal Analysis</p>
+                <p className="text-sm text-white">{analysisResult.details.temporalAnalysis}</p>
+              </div>
+            )}
+          </>
+        )}
 
-        <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
-          <p className="text-sm font-medium text-gray-300 mb-2">Lighting Consistency</p>
-          <p className="text-sm text-gray-400">{analysisResult.details.lightingConsistency}</p>
-        </div>
+        {/* Document Analysis - Show document-specific fields */}
+        {activeTab === "document" && (
+          <>
+            {analysisResult.details.documentAuthenticity && (
+              <div className="bg-gray-900/50 rounded-lg p-4 border border-white/20">
+                <p className="text-sm font-medium text-white mb-2">Document Authenticity</p>
+                <p className="text-sm text-white">{analysisResult.details.documentAuthenticity}</p>
+              </div>
+            )}
+            {analysisResult.details.signatureVerification && (
+              <div className="bg-gray-900/50 rounded-lg p-4 border border-white/20">
+                <p className="text-sm font-medium text-white mb-2">Signature Verification</p>
+                <p className="text-sm text-white">{analysisResult.details.signatureVerification}</p>
+              </div>
+            )}
+            {analysisResult.details.metadataAnalysis && (
+              <div className="bg-gray-900/50 rounded-lg p-4 border border-white/20">
+                <p className="text-sm font-medium text-white mb-2">Metadata Analysis</p>
+                <p className="text-sm text-white">{analysisResult.details.metadataAnalysis}</p>
+              </div>
+            )}
+            {analysisResult.details.watermarkDetection && (
+              <div className="bg-gray-900/50 rounded-lg p-4 border border-white/20">
+                <p className="text-sm font-medium text-white mb-2">Watermark Detection</p>
+                <p className="text-sm text-white">{analysisResult.details.watermarkDetection}</p>
+              </div>
+            )}
+          </>
+        )}
 
-        <div className="bg-gray-900/50 rounded-lg p-4 border border-gray-700">
-          <p className="text-sm font-medium text-gray-300 mb-2">Temporal Analysis</p>
-          <p className="text-sm text-gray-400">{analysisResult.details.temporalAnalysis}</p>
-        </div>
+        {/* Audio Analysis - Show audio-specific fields */}
+        {activeTab === "audio" && (
+          <>
+            {analysisResult.details.voiceAnalysis && (
+              <div className="bg-gray-900/50 rounded-lg p-4 border border-white/20">
+                <p className="text-sm font-medium text-white mb-2">Voice Analysis</p>
+                <p className="text-sm text-white">{analysisResult.details.voiceAnalysis}</p>
+              </div>
+            )}
+            {analysisResult.details.spectralAnalysis && (
+              <div className="bg-gray-900/50 rounded-lg p-4 border border-white/20">
+                <p className="text-sm font-medium text-white mb-2">Spectral Analysis</p>
+                <p className="text-sm text-white">{analysisResult.details.spectralAnalysis}</p>
+              </div>
+            )}
+            {analysisResult.details.prosodyAnalysis && (
+              <div className="bg-gray-900/50 rounded-lg p-4 border border-white/20">
+                <p className="text-sm font-medium text-white mb-2">Prosody Analysis</p>
+                <p className="text-sm text-white">{analysisResult.details.prosodyAnalysis}</p>
+              </div>
+            )}
+            {analysisResult.details.backgroundNoise && (
+              <div className="bg-gray-900/50 rounded-lg p-4 border border-white/20">
+                <p className="text-sm font-medium text-white mb-2">Background Noise Analysis</p>
+                <p className="text-sm text-white">{analysisResult.details.backgroundNoise}</p>
+              </div>
+            )}
+          </>
+        )}
 
+        {/* Artifacts - Show for all tabs */}
         {analysisResult.details.artifacts.length > 0 && (
           <div className="bg-red-500/10 rounded-lg p-4 border border-red-500/30">
             <p className="text-sm font-medium text-red-400 mb-2">Detected Artifacts</p>
@@ -557,7 +806,7 @@ const DetailedReport = ({
       </div>
 
       {/* Action Buttons */}
-      <div className="flex gap-3 pt-4 border-t border-gray-700">
+      <div className="flex gap-3 pt-4 border-t border-white/20">
         <button
           onClick={async () => {
             if (analysisResult) {
@@ -582,9 +831,10 @@ const DetailedReport = ({
 
 const WorkflowTabs = ({ activeTab, setActiveTab }: { activeTab: TabType; setActiveTab: (tab: TabType) => void }) => {
   const tabs = [
-    { id: "image" as TabType, label: "Image Upload" },
-    { id: "video" as TabType, label: "Video Upload" },
-    { id: "document" as TabType, label: "Upload Document" },
+    { id: "image" as TabType, label: "Image Analysis" },
+    { id: "video" as TabType, label: "Video Analysis" },
+    { id: "document" as TabType, label: "Document Analysis" },
+    { id: "audio" as TabType, label: "Audio Analysis" },
   ]
 
   return (
@@ -607,10 +857,47 @@ const WorkflowTabs = ({ activeTab, setActiveTab }: { activeTab: TabType; setActi
 }
 
 export default function LivenessTest() {
+  const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState<TabType>("image")
-  const [uploadedImage, setUploadedImage] = useState<string | null>(null)
-  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null)
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  
+  // Store state per tab
+  const [tabStates, setTabStates] = useState<Record<TabType, {
+    uploadedImage: string | null
+    analysisResult: AnalysisResult | null
+    isAnalyzing: boolean
+  }>>({
+    image: { uploadedImage: null, analysisResult: null, isAnalyzing: false },
+    video: { uploadedImage: null, analysisResult: null, isAnalyzing: false },
+    document: { uploadedImage: null, analysisResult: null, isAnalyzing: false },
+    audio: { uploadedImage: null, analysisResult: null, isAnalyzing: false },
+  })
+
+  // Get current tab state
+  const currentState = tabStates[activeTab]
+  const uploadedImage = currentState.uploadedImage
+  const analysisResult = currentState.analysisResult
+  const isAnalyzing = currentState.isAnalyzing
+
+  // Read tab from query parameter on mount
+  useEffect(() => {
+    const tabParam = searchParams.get("tab")
+    if (tabParam && ["image", "video", "document", "audio"].includes(tabParam)) {
+      setActiveTab(tabParam as TabType)
+    }
+  }, [searchParams])
+
+  // Cleanup URLs on unmount
+  useEffect(() => {
+    return () => {
+      // Clean up all object URLs when component unmounts
+      Object.values(tabStates).forEach((state) => {
+        if (state.uploadedImage) {
+          URL.revokeObjectURL(state.uploadedImage)
+        }
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const features = [
     { 
@@ -631,40 +918,152 @@ export default function LivenessTest() {
   ]
 
   // Generate mock analysis result
-  const generateAnalysisResult = (isFake: boolean): AnalysisResult => {
-    if (isFake) {
-      return {
-        isFake: true,
-        confidence: 94,
-        deepfakeScore: 87,
-        livenessScore: 23,
-        processingTime: 1.2,
-        details: {
-          faceDetection: "Face detected with inconsistencies in facial geometry. Unnatural blending detected around facial boundaries.",
-          textureAnalysis: "Texture anomalies detected in skin regions. Inconsistent pixel patterns suggest AI-generated manipulation.",
-          lightingConsistency: "Lighting inconsistencies observed. Multiple light sources detected that don't align with natural scene composition.",
-          temporalAnalysis: "Static image - temporal analysis not applicable. However, spatial analysis reveals manipulation artifacts.",
-          artifacts: [
-            "Blur inconsistencies around facial features",
-            "Unnatural skin texture patterns",
-            "Geometric distortions in facial structure",
-            "Color space anomalies in shadow regions"
-          ]
+  const generateAnalysisResult = (isFake: boolean, tabType: TabType): AnalysisResult => {
+    if (tabType === "audio") {
+      if (isFake) {
+        return {
+          isFake: true,
+          confidence: 91,
+          deepfakeScore: 82,
+          livenessScore: 19,
+          processingTime: 1.5,
+          details: {
+            voiceAnalysis: "Voice characteristics show inconsistencies in formant frequencies. Unnatural vocal tract modeling detected, suggesting AI-generated voice synthesis.",
+            spectralAnalysis: "Spectral anomalies detected in frequency domain. Irregular harmonic patterns and phase inconsistencies indicate voice cloning artifacts.",
+            prosodyAnalysis: "Prosodic features (pitch, rhythm, stress) show unnatural patterns. Inconsistent intonation contours suggest synthetic voice generation.",
+            backgroundNoise: "Background noise analysis reveals potential audio splicing artifacts. Inconsistent noise floor levels detected across different segments.",
+            artifacts: [
+              "Unnatural formant transitions",
+              "Spectral discontinuities in voice segments",
+              "Inconsistent prosodic patterns",
+              "Audio compression artifacts suggesting manipulation"
+            ]
+          }
+        }
+      } else {
+        return {
+          isFake: false,
+          confidence: 97,
+          deepfakeScore: 8,
+          livenessScore: 94,
+          processingTime: 1.1,
+          details: {
+            voiceAnalysis: "Voice characteristics show natural formant frequencies and consistent vocal tract modeling. No signs of synthetic voice generation detected.",
+            spectralAnalysis: "Spectral analysis reveals natural harmonic patterns with consistent phase relationships. Frequency domain characteristics match authentic human speech.",
+            prosodyAnalysis: "Prosodic features show natural patterns consistent with human speech. Intonation contours and rhythm patterns appear authentic.",
+            backgroundNoise: "Background noise analysis shows consistent noise floor levels throughout the recording. No signs of audio splicing or manipulation detected.",
+            artifacts: []
+          }
         }
       }
-    } else {
-      return {
-        isFake: false,
-        confidence: 98,
-        deepfakeScore: 12,
-        livenessScore: 96,
-        processingTime: 0.8,
-        details: {
-          faceDetection: "Face detected with natural geometry and consistent facial features. No signs of manipulation detected.",
-          textureAnalysis: "Natural skin texture patterns observed. Consistent pixel distribution across facial regions.",
-          lightingConsistency: "Consistent lighting throughout the image. Natural shadow and highlight transitions detected.",
-          temporalAnalysis: "Static image - temporal analysis not applicable. Spatial analysis confirms authenticity.",
-          artifacts: []
+    } else if (tabType === "document") {
+      if (isFake) {
+        return {
+          isFake: true,
+          confidence: 89,
+          deepfakeScore: 78,
+          livenessScore: 15,
+          processingTime: 1.8,
+          details: {
+            documentAuthenticity: "Document authenticity verification failed. Multiple inconsistencies detected in document structure, formatting, and digital signatures.",
+            signatureVerification: "Signature verification indicates potential forgery. Digital signature validation failed, and handwriting analysis reveals unnatural stroke patterns.",
+            metadataAnalysis: "Metadata analysis reveals suspicious modifications. File creation dates, modification timestamps, and embedded metadata show inconsistencies suggesting document tampering.",
+            watermarkDetection: "Watermark detection found anomalies. Expected security watermarks are missing or appear to be digitally altered, indicating potential document manipulation.",
+            artifacts: [
+              "Inconsistent font rendering across document sections",
+              "Anomalies in PDF structure and object references",
+              "Missing or altered digital signatures",
+              "Metadata timestamp inconsistencies"
+            ]
+          }
+        }
+      } else {
+        return {
+          isFake: false,
+          confidence: 96,
+          deepfakeScore: 5,
+          livenessScore: 98,
+          processingTime: 1.3,
+          details: {
+            documentAuthenticity: "Document authenticity verified. All structural elements, formatting, and digital signatures appear consistent and authentic.",
+            signatureVerification: "Signature verification passed. Digital signature validation successful, and handwriting analysis shows natural stroke patterns consistent with authentic signatures.",
+            metadataAnalysis: "Metadata analysis confirms document integrity. File creation dates, modification timestamps, and embedded metadata are consistent with expected document lifecycle.",
+            watermarkDetection: "Watermark detection successful. All expected security watermarks are present and appear authentic, with no signs of digital alteration.",
+            artifacts: []
+          }
+        }
+      }
+    } else if (tabType === "image") {
+      if (isFake) {
+        return {
+          isFake: true,
+          confidence: 94,
+          deepfakeScore: 87,
+          livenessScore: 23,
+          processingTime: 1.2,
+          details: {
+            faceDetection: "Face detected with inconsistencies in facial geometry. Unnatural blending detected around facial boundaries.",
+            textureAnalysis: "Texture anomalies detected in skin regions. Inconsistent pixel patterns suggest AI-generated manipulation.",
+            lightingConsistency: "Lighting inconsistencies observed. Multiple light sources detected that don't align with natural scene composition.",
+            artifacts: [
+              "Blur inconsistencies around facial features",
+              "Unnatural skin texture patterns",
+              "Geometric distortions in facial structure",
+              "Color space anomalies in shadow regions"
+            ]
+          }
+        }
+      } else {
+        return {
+          isFake: false,
+          confidence: 98,
+          deepfakeScore: 12,
+          livenessScore: 96,
+          processingTime: 0.8,
+          details: {
+            faceDetection: "Face detected with natural geometry and consistent facial features. No signs of manipulation detected.",
+            textureAnalysis: "Natural skin texture patterns observed. Consistent pixel distribution across facial regions.",
+            lightingConsistency: "Consistent lighting throughout the image. Natural shadow and highlight transitions detected.",
+            artifacts: []
+          }
+        }
+      }
+    } else { // video
+      if (isFake) {
+        return {
+          isFake: true,
+          confidence: 94,
+          deepfakeScore: 87,
+          livenessScore: 23,
+          processingTime: 1.2,
+          details: {
+            faceDetection: "Face detected with inconsistencies in facial geometry. Unnatural blending detected around facial boundaries.",
+            textureAnalysis: "Texture anomalies detected in skin regions. Inconsistent pixel patterns suggest AI-generated manipulation.",
+            lightingConsistency: "Lighting inconsistencies observed. Multiple light sources detected that don't align with natural scene composition.",
+            temporalAnalysis: "Temporal inconsistencies detected across frames. Unnatural motion patterns and frame-to-frame transitions suggest deepfake manipulation.",
+            artifacts: [
+              "Blur inconsistencies around facial features",
+              "Unnatural skin texture patterns",
+              "Geometric distortions in facial structure",
+              "Color space anomalies in shadow regions",
+              "Frame-to-frame motion artifacts"
+            ]
+          }
+        }
+      } else {
+        return {
+          isFake: false,
+          confidence: 98,
+          deepfakeScore: 12,
+          livenessScore: 96,
+          processingTime: 0.8,
+          details: {
+            faceDetection: "Face detected with natural geometry and consistent facial features. No signs of manipulation detected.",
+            textureAnalysis: "Natural skin texture patterns observed. Consistent pixel distribution across facial regions.",
+            lightingConsistency: "Consistent lighting throughout the video. Natural shadow and highlight transitions detected across all frames.",
+            temporalAnalysis: "Temporal analysis shows consistent motion patterns across frames. Natural frame-to-frame transitions detected with no signs of manipulation.",
+            artifacts: []
+          }
         }
       }
     }
@@ -673,37 +1072,60 @@ export default function LivenessTest() {
   const handleFileUpload = (file: File | null) => {
     if (!file) {
       // Clean up previous image URL immediately
-      setUploadedImage((prevImage) => {
-        if (prevImage) {
-          URL.revokeObjectURL(prevImage)
+      setTabStates((prev) => {
+        const currentState = prev[activeTab]
+        if (currentState.uploadedImage) {
+          URL.revokeObjectURL(currentState.uploadedImage)
         }
-        return null
+        return {
+          ...prev,
+          [activeTab]: {
+            uploadedImage: null,
+            analysisResult: null,
+            isAnalyzing: false,
+          },
+        }
       })
-      setAnalysisResult(null)
-      setIsAnalyzing(false)
       return
     }
 
-    // Clean up previous image URL
-    setUploadedImage((prevImage) => {
-      if (prevImage) {
-        URL.revokeObjectURL(prevImage)
+    // Clean up previous image URL for this tab
+    setTabStates((prev) => {
+      const currentState = prev[activeTab]
+      if (currentState.uploadedImage) {
+        URL.revokeObjectURL(currentState.uploadedImage)
       }
-      return null
+      return prev
     })
 
     // Create preview URL
     const imageUrl = URL.createObjectURL(file)
-    setUploadedImage(imageUrl)
-    setIsAnalyzing(true)
+    
+    // Update state for current tab
+    setTabStates((prev) => ({
+      ...prev,
+      [activeTab]: {
+        ...prev[activeTab],
+        uploadedImage: imageUrl,
+        isAnalyzing: true,
+      },
+    }))
 
     // Simulate analysis (in real app, this would be an API call)
     setTimeout(() => {
       // Randomly determine if fake (70% chance of fake for demo)
       const isFake = Math.random() > 0.3
-      const result = generateAnalysisResult(isFake)
-      setAnalysisResult(result)
-      setIsAnalyzing(false)
+      const result = generateAnalysisResult(isFake, activeTab)
+      
+      // Update state with analysis result
+      setTabStates((prev) => ({
+        ...prev,
+        [activeTab]: {
+          ...prev[activeTab],
+          analysisResult: result,
+          isAnalyzing: false,
+        },
+      }))
     }, 2000)
   }
 
@@ -713,17 +1135,22 @@ export default function LivenessTest() {
       case "image":
         return {
           title: "Image Deepfake Detection",
-          description: "Upload an image to analyze and detect deepfake manipulation with our advanced AI-powered detection technology"
+          description: "Upload an image to analyze and detect deepfake manipulation with advanced AI-powered detection technology"
         }
       case "video":
         return {
           title: "Video Deepfake Detection",
-          description: "Upload a video file to test our real-time deepfake detection API with frame-by-frame analysis and industry-leading accuracy"
+          description: "Upload a video file to test real-time deepfake detection with frame-by-frame analysis and industry-leading accuracy"
         }
       case "document":
         return {
           title: "Document Verification",
-          description: "Upload a document to verify authenticity and detect any signs of manipulation or forgery using advanced forensic analysis"
+          description: "Upload a document to verify authenticity and detect manipulation or forgery using advanced forensic analysis"
+        }
+      case "audio":
+        return {
+          title: "Audio Deepfake Detection",
+          description: "Upload an audio file to detect voice cloning, synthetic speech, and audio manipulation using advanced spectral analysis"
         }
     }
   }
@@ -748,7 +1175,7 @@ export default function LivenessTest() {
                 {headerContent.title}
               </span>
             </h2>
-            <p className="text-base md:text-lg text-gray-400 max-w-2xl">
+            <p className="text-base md:text-lg text-gray-400">
               {headerContent.description}
             </p>
           </motion.div>
@@ -783,7 +1210,7 @@ export default function LivenessTest() {
               <div className="bg-gray-800 rounded-xl shadow-lg border border-gray-700 p-6 lg:p-8">
                 <div className="flex flex-col items-center justify-center py-12">
                   <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                  <p className="text-gray-400">Analyzing image for deepfake detection...</p>
+                  <p className="text-gray-400">Analyzing {activeTab === "audio" ? "audio" : activeTab === "video" ? "video" : activeTab === "document" ? "document" : "image"} for deepfake detection...</p>
                 </div>
               </div>
             ) : (
@@ -792,6 +1219,7 @@ export default function LivenessTest() {
                 onClear={() => {
                   handleFileUpload(null)
                 }}
+                activeTab={activeTab}
               />
             )}
           </div>

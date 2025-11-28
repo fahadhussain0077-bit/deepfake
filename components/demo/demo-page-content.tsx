@@ -34,50 +34,63 @@
 //   )
 // }
 
+"use client"
+
 import { useState } from 'react';
-import { Shield, Video, Image, FileText, Zap, CheckCircle } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import Image from 'next/image';
+import { Shield, CheckCircle } from 'lucide-react';
 
 export default function DemoPage() {
   const [hoveredCard, setHoveredCard] = useState<number | null>(null);
+  const router = useRouter();
 
   const services = [
     {
       id: 1,
-      icon: Video,
+      iconImage: "/v1.JPG",
       title: "Video Analysis",
       description: "Advanced deepfake detection for video content with real-time processing",
       color: "from-blue-500 to-cyan-500",
       iconBg: "bg-blue-500/20",
-      iconColor: "text-blue-400"
+      iconColor: "text-blue-400",
+      tabId: "video"
     },
     {
       id: 2,
-      icon: Image,
+      iconImage: "/i1.JPG",
       title: "Image Verification",
       description: "Detect manipulated images and synthetic faces with high accuracy",
       color: "from-purple-500 to-pink-500",
       iconBg: "bg-purple-500/20",
-      iconColor: "text-purple-400"
+      iconColor: "text-purple-400",
+      tabId: "image"
     },
     {
       id: 3,
-      icon: FileText,
+      iconImage: "/d1.JPG",
       title: "Document Authentication",
       description: "Verify the authenticity of digital documents and signatures",
       color: "from-orange-500 to-red-500",
       iconBg: "bg-orange-500/20",
-      iconColor: "text-orange-400"
+      iconColor: "text-orange-400",
+      tabId: "document"
     },
     {
       id: 4,
-      icon: Zap,
-      title: "Real-time Liveness",
-      description: "Instant biometric verification with passive liveness detection",
+      iconImage: "/a1.JPG",
+      title: "Audio Analysis",
+      description: "Detect synthetic voices and audio deepfakes with advanced AI analysis",
       color: "from-green-500 to-emerald-500",
       iconBg: "bg-green-500/20",
-      iconColor: "text-green-400"
+      iconColor: "text-green-400",
+      tabId: "audio"
     }
   ];
+
+  const handleCardClick = (tabId: string) => {
+    router.push(`/try?tab=${tabId}`);
+  };
 
   return (
     <div className="h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white overflow-hidden flex flex-col">
@@ -90,10 +103,10 @@ export default function DemoPage() {
           </div>
           
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-3 leading-tight">
-            <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-              DeepFake Detection
+            <span className=" bg-clip-text text-transparent">
+              
             </span>
-            {' '}Services
+            {' '}DeepFake Detection Services
           </h1>
           
           <p className="text-base sm:text-lg text-slate-300 mb-2 max-w-3xl">
@@ -110,13 +123,13 @@ export default function DemoPage() {
         <div className="max-w-7xl mx-auto w-full">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
             {services.map((service) => {
-              const Icon = service.icon;
               return (
                 <div
                   key={service.id}
                   className="group relative bg-gradient-to-br from-slate-900/50 to-slate-800/30 backdrop-blur-sm border border-slate-700/50 rounded-xl p-4 cursor-pointer transition-all duration-300 hover:border-slate-600 hover:shadow-xl hover:shadow-blue-500/10 overflow-hidden"
                   onMouseEnter={() => setHoveredCard(service.id)}
                   onMouseLeave={() => setHoveredCard(null)}
+                  onClick={() => handleCardClick(service.tabId)}
                 >
                   {/* Gradient Overlay */}
                   <div 
@@ -125,8 +138,14 @@ export default function DemoPage() {
                   
                   {/* Icon */}
                   <div className="relative mb-4 flex-shrink-0 z-10">
-                    <div className={`inline-flex items-center justify-center w-12 h-12 rounded-xl ${service.iconBg} border border-slate-700/50 group-hover:border-slate-600/50 group-hover:scale-110 group-hover:shadow-xl transition-all duration-300 shadow-lg shadow-black/20`}>
-                      <Icon className={`w-6 h-6 ${service.iconColor} group-hover:scale-110 transition-transform duration-300`} strokeWidth={2.5} />
+                    <div className={`inline-flex items-center justify-center w-20 h-20 rounded-xl ${service.iconBg} border border-slate-700/50 group-hover:border-slate-600/50 group-hover:scale-110 group-hover:shadow-xl transition-all duration-300 shadow-lg shadow-black/20 overflow-hidden`}>
+                      <Image 
+                        src={service.iconImage} 
+                        alt={service.title}
+                        width={80}
+                        height={80}
+                        className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-300"
+                      />
                     </div>
                   </div>
                   
